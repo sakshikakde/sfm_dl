@@ -1,6 +1,7 @@
-### Smoothness loss is updated
+### Smoothness loss is not updated
 ### SSIM is added in pixel loss
 ### Variable Learning Rate
+### resnet architecture for disparity net included
 
 from __future__ import division
 import os
@@ -12,8 +13,6 @@ import tensorflow.contrib.slim as slim
 from data_loader import DataLoader
 from nets import *
 from utils import *
-
-
 
 class SfMLearner(object):
     def __init__(self):
@@ -33,8 +32,8 @@ class SfMLearner(object):
             src_image_stack = self.preprocess_image(src_image_stack)
 
         with tf.name_scope("depth_prediction"):
-            pred_disp, depth_net_endpoints = disp_net(tgt_image, 
-                                                      is_training=True)
+            # pred_disp, depth_net_endpoints = disp_net(tgt_image, is_training=True)
+            pred_disp, depth_net_endpoints = disp_net2(tgt_image, 'resnet')
             pred_depth = [1./d for d in pred_disp]
 
         with tf.name_scope("pose_and_explainability_prediction"):
@@ -71,13 +70,13 @@ class SfMLearner(object):
 
                 if opt.smooth_weight > 0:
                     ### sfm smootness loss
-                    smooth_loss += opt.smooth_weight/(2**s) * \
-                        self.compute_smooth_loss(pred_disp[s])
+                    # smooth_loss += opt.smooth_weight/(2**s) * \
+                    #     self.compute_smooth_loss(pred_disp[s])
                     
                     ### geonet smoothness loss
                     # curr_img = tf.concat([curr_tgt_image, curr_src_image_stack], axis=0)
-                    # smooth_loss += opt.smooth_weight/(2**s) * \
-                    #     self.compute_smooth_loss_geo(pred_disp[s], curr_img)
+                    smooth_loss += opt.smooth_weight/(2**s) * \
+                        self.compute_smooth_loss_geo(pred_disp[s])
                 
                 for i in range(opt.num_source):
                     # Inverse warp the source image to the target image frame
@@ -198,20 +197,19 @@ class SfMLearner(object):
                tf.reduce_mean(tf.abs(dy2))
     
     ######## smoothness loss geonet ##############
-    def compute_smooth_loss_geo(self, pred_disp, image):
+    def compute_smooth_loss_geo(self, pred_disp):
         def gradient(pred):
             D_dy = pred[:, 1:, :, :] - pred[:, :-1, :, :]
             D_dx = pred[:, :, 1:, :] - pred[:, :, :-1, :]
             return D_dx, D_dy
 
         disp_dx, disp_dy = gradient(pred_disp)
-        img_dx, img_dy = gradient(image)
 
-        e_x = tf.exp(-tf.reduce_mean(tf.abs(img_dx), 3, keep_dims=True))
-        e_y = tf.exp(-tf.reduce_mean(tf.abs(img_dy), 3, keep_dims=True))
+        e_x = tf.exp(-tf.reduce_mean(tf.abs(disp_dx), 3, keep_dims=True))
+        e_y = tf.exp(-tf.reduce_mean(tf.abs(disp_dy), 3, keep_dims=True))
 
-        smoothness_x = disp_gradients_x * e_x
-        smoothness_y = disp_gradients_y * e_y
+        smoothness_x = disp_dx * e_x
+        smoothness_y = disp_dy * e_y
         return tf.reduce_mean(tf.abs(smoothness_x)) + tf.reduce_mean(tf.abs(smoothness_y))
     ########## SSIM metric  #####################    
     def SSIM(self, x, y):
@@ -239,9 +237,9 @@ class SfMLearner(object):
         return ssim
     ############# vary learning rate ##############
     def variable_LR(self,step,learning_rate,lr_step):
-        #### reduce learning rate by 10% every lr_step 
+        #### reduce learning rate by 30% every lr_step 
         if(step % lr_step == 0):
-            learning_rate *= 0.9
+            learning_rate *= 0.7
             print('Updating learning rate to: ' + str(learning_rate))
         return learning_rate
 ########################## Train Graph Built ###############################################
