@@ -9,10 +9,10 @@ import os
 
 flags = tf.app.flags
 flags.DEFINE_string("dataset_dir", "../TrainingAndValData/SfMLearnerData", "Dataset directory")
-flags.DEFINE_string("checkpoint_dir", "../sfmLearner_checkpoints/SSIM_resnet/", "Directory name to save the checkpoints")
+flags.DEFINE_string("checkpoint_dir", "../sfmLearner_checkpoints/onlySSIM_fixedLR/", "Directory name to save the checkpoints")
 # flags.DEFINE_string("init_checkpoint_file", './models/model-190532', "Specific checkpoint file to initialize from")
 flags.DEFINE_string("init_checkpoint_file", None, "Specific checkpoint file to initialize from")
-flags.DEFINE_float("learning_rate", 0.002, "Learning rate of for adam")
+flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam")
 flags.DEFINE_integer("lr_step", 25000, "Steps to update learning rate")
 flags.DEFINE_float("beta1", 0.9, "Momentum term of adam")
 flags.DEFINE_float("smooth_weight", 0.5, "Weight for smoothness")
