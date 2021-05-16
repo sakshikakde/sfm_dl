@@ -1,7 +1,7 @@
 ### Smoothness loss is added -on 
 ### SSIM is added in pixel loss -on
-### Variable Learning Rate -off
-### resnet architecture for disparity net included -off
+### Variable Learning Rate -on
+### resnet architecture for disparity net included -on
 
 from __future__ import division
 import os
@@ -32,8 +32,8 @@ class SfMLearner(object):
             src_image_stack = self.preprocess_image(src_image_stack)
 
         with tf.name_scope("depth_prediction"):
-            pred_disp, depth_net_endpoints = disp_net(tgt_image, is_training=True)
-            # pred_disp, depth_net_endpoints = disp_net2(tgt_image, 'resnet')
+            # pred_disp, depth_net_endpoints = disp_net(tgt_image, is_training=True) # vgg architecture
+            pred_disp, depth_net_endpoints = disp_net2(tgt_image, 'vgg') # resnet architecture
             pred_depth = [1./d for d in pred_disp]
 
         with tf.name_scope("pose_and_explainability_prediction"):
@@ -70,13 +70,12 @@ class SfMLearner(object):
 
                 if opt.smooth_weight > 0:
                     ### sfm smootness loss
-                    smooth_loss += opt.smooth_weight/(2**s) * \
-                        self.compute_smooth_loss(pred_disp[s])
+                    # smooth_loss += opt.smooth_weight/(2**s) * \
+                    #     self.compute_smooth_loss(pred_disp[s])
                     
                     ### geonet smoothness loss
-                    # curr_img = tf.concat([curr_tgt_image, curr_src_image_stack], axis=0)
-                    # smooth_loss += opt.smooth_weight/(2**s) * \
-                    #     self.compute_smooth_loss_geo(pred_disp[s])
+                    smooth_loss += opt.smooth_weight/(2**s) * \
+                        self.compute_smooth_loss_geo(pred_disp[s], curr_tgt_image)
                 
                 for i in range(opt.num_source):
                     # Inverse warp the source image to the target image frame
@@ -198,12 +197,18 @@ class SfMLearner(object):
     
     ######## smoothness loss geonet ##############
     def compute_smooth_loss_geo(self, pred_disp):
+    # def compute_smooth_loss_geo(self, pred_disp, tgt_image):
+
         def gradient(pred):
             D_dy = pred[:, 1:, :, :] - pred[:, :-1, :, :]
             D_dx = pred[:, :, 1:, :] - pred[:, :, :-1, :]
             return D_dx, D_dy
 
         disp_dx, disp_dy = gradient(pred_disp)
+
+        # img_dx, img_dy = gradient(tgt_image)
+        # e_x = tf.exp(-tf.reduce_mean(tf.abs(img_dx), 3, keep_dims=True))
+        # e_y = tf.exp(-tf.reduce_mean(tf.abs(img_dy), 3, keep_dims=True))
 
         e_x = tf.exp(-tf.reduce_mean(tf.abs(disp_dx), 3, keep_dims=True))
         e_y = tf.exp(-tf.reduce_mean(tf.abs(disp_dy), 3, keep_dims=True))
@@ -323,9 +328,8 @@ class SfMLearner(object):
                     "global_step": self.global_step,
                     "incr_global_step": self.incr_global_step
                 }
-
-                ## change learning rate after lr_steps
-                # opt.learning_rate = self.variable_LR(step,opt.learning_rate,opt.lr_step) 
+                
+                opt.learning_rate = self.variable_LR(step,opt.learning_rate,opt.lr_step) ## change learning rate after lr_steps                 
                 if step % opt.summary_freq == 0:
                     fetches["loss"] = self.total_loss
                     fetches["summary"] = sv.summary_op
@@ -356,9 +360,10 @@ class SfMLearner(object):
                     self.img_height, self.img_width, 3], name='raw_input')
         input_mc = self.preprocess_image(input_uint8)
         with tf.name_scope("depth_prediction"):
-            pred_disp, depth_net_endpoints = disp_net2(
-                input_mc, 'resnet', is_training=False)
+            pred_disp, depth_net_endpoints = disp_net2(input_mc, 'vgg', is_training=False)
             pred_depth = [1./disp for disp in pred_disp]
+            
+
         pred_depth = pred_depth[0]
         self.inputs = input_uint8
         self.pred_depth = pred_depth
@@ -395,6 +400,7 @@ class SfMLearner(object):
             self.seq_length = seq_length
             self.num_source = seq_length - 1
             self.build_pose_test_graph()
+            
     ##################################################################################
     ######################## utility functions #######################################          
     def preprocess_image(self, image):
